@@ -82,6 +82,81 @@ raw IMU를 그대로 보면 노이즈/중력 영향 때문에 이벤트를 정�
 
 
 
+## Task 1
+
+### Process of Collecting Raw IMU Data
+
+#### 1) Data acquisition device and format
+The IMU sensor measures the following signals and stores them in a CSV file:
+- **Acceleration:** `Acc_X`, `Acc_Y`, `Acc_Z` (unit: **g**)
+- **Gyroscope:** `Gyro_X`, `Gyro_Y`, `Gyro_Z` (unit: **deg/s**)
+- **Timestamp:** `Timestamp` (unit: **ms**)
+
+#### 2) Data collection flow based on `IMU_SD_serialtrigger.ino`
+- Initialize the IMU and configure sensor settings (including sampling interval)
+- Start logging / separate sessions using a serial trigger (e.g., button or command)
+- Periodically read `(timestamp + accel + gyro)` and save to SD card / log file
+- When a new session starts, a marker such as `--- NEW SESSION ---` may be inserted
+
+#### 3) Sampling frequency verified in this analysis
+Using timestamp differences in `raw_imu_log.csv`, the average sampling interval (`avg_dt`) is computed, and the sampling frequency is estimated as:
+- **fs = 1000 / avg_dt**
+- Result: **Estimated Sampling Frequency ≈ 72.09 Hz**
+- In other words, IMU data is recorded approximately every **1/72 seconds** on average
+
+
+---
+
+### Why Perform Smoothing and Filtering on Raw IMU Data?
+
+#### 1) Why smoothing (SMA) is needed
+Raw IMU data typically includes sensor noise, small vibrations, and occasional spikes. Applying a moving average helps reduce high-frequency noise, which:
+- makes the overall trend easier to observe
+- stabilizes feature computation (e.g., mean/variance/peaks)
+
+#### 2) Why high-pass filtering is needed (gravity removal)
+Acceleration signals always include gravity (~1g), which behaves like a DC (low-frequency) component. If gravity dominates, motion-related changes can be less visible. By applying a high-pass filter:
+- gravity / low-frequency components are reduced
+- dynamic events (movement, impact, vibration) become clearer
+- sign-change based features such as **ZCR** become more meaningful
+
+
+---
+
+### What Is Performed in Feature Extraction?
+
+#### 1) SMV-based features (useful for motion intensity / impact detection)
+- **SMV_Mean:** average activity intensity within a window
+- **SMV_Std:** variability / irregularity of motion (higher activity → higher variance)
+- **Max_SMV:** indicator of potential impacts (e.g., fall or strong shock may produce peaks)
+
+#### 2) ZCR-based features (indicator of vibration / activity)
+- Compute the number of **zero crossings** from the gravity-removed signal
+- Faster vibration or more active movement can lead to higher ZCR
+
+
+---
+
+### Comments on the Analysis: Use and Need
+
+#### 1) Usefulness of this analysis
+Raw IMU signals are hard to interpret quantitatively due to noise and gravity effects. After smoothing and gravity removal, extracted features allow clearer time-based comparisons such as:
+- **when strong events occurred** (peaks in `Max_SMV`)
+- **which segments had high activity** (increase in `SMV_Std`)
+- **how frequent vibration/movement was** (changes in `ZCR`)
+
+#### 2) Example applications
+- **Fall / impact detection:** detect segments with `Max_SMV` peaks and increased `SMV_Std`
+- **Activity recognition:** classify motion states using a combination of SMV statistics and ZCR
+- **ML input generation:** use window-based features as feature vectors for model training
+
+#### 3) Limitations and possible improvements
+Current features are mostly simple window-based statistics (Mean/Std/Max/ZCR). If motion classes become more complex, additional features may be needed (e.g., signal energy, FFT band power, jerk).  
+Also, the current analysis processes the full signal without train/test separation. For real model training, proper segmentation and labeling (ground-truth definition) are required.
+
+
+
+
 <Task2>
 
 Process of collecting smooth IMU data
